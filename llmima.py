@@ -72,49 +72,21 @@ model = "llama3-70b-8192"  # 推薦使用文字模型
 # Prometheus API Functions
 # ------------------------------------------------------------------------------
 
-def get_pod_cpu_usage(namespace: str, pod: str, range_str: str = "[1h]") -> str:
+def get_pod_cpu_usage(namespace: str, pod: str, range_str: str = "[1h]", aggregation: str = "sum") -> str:
     """
     查詢指定 Namespace 和 Pod 的 CPU 使用量。
 
     Args:
         namespace (str): Kubernetes namespace.
         pod (str): Pod name.
-        range_str (str): Time range for the query (e.g., "[1h]").
+        range_str (str): Time range for the query (e.g., "[1h]", "[1w]").
+        aggregation (str): Aggregation method (sum, avg, max, min).
 
     Returns:
         str: JSON string of CPU usage data.
     """
     metric_name = "container_cpu_usage_seconds_total"
-    query = f'{metric_name}{{namespace="{namespace}", pod="{pod}"}}{range_str}'
-    try:
-        resp = requests.get(
-            f"{PROMETHEUS_URL}/api/v1/query",
-            params={"query": query},
-            timeout=10
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        if data.get("status") == "success":
-            return json.dumps(data["data"])
-        else:
-            return json.dumps({"error": f"Prometheus query failed: {data.get('error')}"} )
-    except requests.exceptions.RequestException as e:
-        return json.dumps({"error": f"Prometheus API request failed: {str(e)}"})
-
-def get_pod_memory_usage(namespace: str, pod: str, range_str: str = "[1h]") -> str:
-    """
-    查詢指定 Namespace 和 Pod 的記憶體使用量。
-
-    Args:
-        namespace (str): Kubernetes namespace.
-        pod (str): Pod name.
-        range_str (str): Time range for the query (e.g., "[1h]").
-
-    Returns:
-        str: JSON string of memory usage data.
-    """
-    metric_name = "container_memory_usage_bytes"
-    query = f'{metric_name}{{namespace="{namespace}", pod="{pod}"}}{range_str}'
+    query = f'{aggregation}(rate({metric_name}{{namespace="{namespace}", pod="{pod}"}}[5m])) {range_str}'
     try:
         resp = requests.get(
             f"{PROMETHEUS_URL}/api/v1/query",
@@ -127,6 +99,132 @@ def get_pod_memory_usage(namespace: str, pod: str, range_str: str = "[1h]") -> s
             return json.dumps(data["data"])
         else:
             return json.dumps({"error": f"Prometheus query failed: {data.get('error')}"})
+    except requests.exceptions.RequestException as e:
+        return json.dumps({"error": f"Prometheus API request failed: {str(e)}"})
+
+def get_pod_memory_usage(namespace: str, pod: str, range_str: str = "[1h]", aggregation: str = "sum") -> str:
+    """
+    查詢指定 Namespace 和 Pod 的記憶體使用量。
+
+    Args:
+        namespace (str): Kubernetes namespace.
+        pod (str): Pod name.
+        range_str (str): Time range for the query (e.g., "[1h]", "[1w]").
+        aggregation (str): Aggregation method (sum, avg, max, min).
+
+    Returns:
+        str: JSON string of memory usage data.
+    """
+    metric_name = "container_memory_usage_bytes"
+    query = f'{aggregation}({metric_name}{{namespace="{namespace}", pod="{pod}"}}) {range_str}'
+    try:
+        resp = requests.get(
+            f"{PROMETHEUS_URL}/api/v1/query",
+            params={"query": query},
+            timeout=10
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get("status") == "success":
+            return json.dumps(data["data"])
+        else:
+            return json.dumps({"error": f"Prometheus query failed: {data.get('error')}"})
+    except requests.exceptions.RequestException as e:
+        return json.dumps({"error": f"Prometheus API request failed: {str(e)}"})
+
+def get_node_cpu_usage(node: str, range_str: str = "[1h]") -> str:
+    """
+    查詢指定節點的 CPU 使用量。
+
+    Args:
+        node (str): Node name.
+        range_str (str): Time range for the query (e.g., "[1h]", "[1w]").
+
+    Returns:
+        str: JSON string of CPU usage data.
+    """
+    metric_name = "node_cpu_seconds_total"
+    query = f'sum(rate({metric_name}{{instance="{node}"}}[5m])) by (mode) {range_str}'
+    try:
+        resp = requests.get(
+            f"{PROMETHEUS_URL}/api/v1/query",
+            params={"query": query},
+            timeout=10
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get("status") == "success":
+            return json.dumps(data["data"])
+        else:
+            return json.dumps({"error": f"Prometheus query failed: {data.get('error')}"})
+    except requests.exceptions.RequestException as e:
+        return json.dumps({"error": f"Prometheus API request failed: {str(e)}"})
+
+def get_node_memory_usage(node: str, range_str: str = "[1h]") -> str:
+    """
+    查詢指定節點的記憶體使用量。
+
+    Args:
+        node (str): Node name.
+        range_str (str): Time range for the query (e.g., "[1h]", "[1w]").
+
+    Returns:
+        str: JSON string of memory usage data.
+    """
+    metric_name = "node_memory_MemTotal_bytes"
+    query = f'{metric_name}{{instance="{node}"}} - node_memory_MemAvailable_bytes{{instance="{node}"}} {range_str}'
+    try:
+        resp = requests.get(
+            f"{PROMETHEUS_URL}/api/v1/query",
+            params={"query": query},
+            timeout=10
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get("status") == "success":
+            return json.dumps(data["data"])
+        else:
+            return json.dumps({"error": f"Prometheus query failed: {data.get('error')}"})
+    except requests.exceptions.RequestException as e:
+        return json.dumps({"error": f"Prometheus API request failed: {str(e)}"})
+
+def get_all_nodes_metrics(range_str: str = "[1h]") -> str:
+    """
+    查詢所有節點的 CPU 和記憶體使用量。
+
+    Args:
+        range_str (str): Time range for the query (e.g., "[1h]", "[1w]").
+
+    Returns:
+        str: JSON string containing metrics for all nodes.
+    """
+    try:
+        # Get CPU metrics
+        cpu_query = f'sum(rate(node_cpu_seconds_total[5m])) by (instance) {range_str}'
+        cpu_resp = requests.get(
+            f"{PROMETHEUS_URL}/api/v1/query",
+            params={"query": cpu_query},
+            timeout=10
+        )
+        cpu_resp.raise_for_status()
+        cpu_data = cpu_resp.json()
+
+        # Get memory metrics
+        memory_query = f'node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes {range_str}'
+        memory_resp = requests.get(
+            f"{PROMETHEUS_URL}/api/v1/query",
+            params={"query": memory_query},
+            timeout=10
+        )
+        memory_resp.raise_for_status()
+        memory_data = memory_resp.json()
+
+        # Combine results
+        combined_data = {
+            "cpu": cpu_data.get("data", {}),
+            "memory": memory_data.get("data", {})
+        }
+        return json.dumps(combined_data)
     except requests.exceptions.RequestException as e:
         return json.dumps({"error": f"Prometheus API request failed: {str(e)}"})
 
@@ -249,7 +347,7 @@ def get_prometheus_metrics():
     4. Processes tool calls (e.g., fetching CPU/memory usage) and updates the conversation.
     """
     # Get the metrics query from the user
-    metrics_query = input("Enter your Prometheus metrics query (e.g., 'Get CPU usage for pod my-pod in namespace default'): ")
+    metrics_query = input("Enter your Prometheus metrics query (e.g., 'Get CPU usage for pod my-pod in namespace default over the last week'): ")
 
     # Define the initial conversation context for the assistant
     messages = [
@@ -257,9 +355,12 @@ def get_prometheus_metrics():
             "role": "system",
             "content": (
                 "You are a Kubernetes monitoring assistant. Help the user fetch Prometheus metrics for their Kubernetes cluster. "
-                "Use the provided tools to query CPU and memory usage for specific pods or get the top pods by CPU/memory usage in a namespace. "
-                "If the user asks for a specific pod's metrics, use get_pod_cpu_usage or get_pod_memory_usage with the appropriate namespace, pod name, and time range. "
-                "If the user asks for top pods, use get_top_cpu_pods or get_top_memory_pods with the namespace and k value (default to 3 if not specified). "
+                "Use the provided tools to query CPU and memory usage for specific pods, nodes, or get aggregated metrics across the cluster. "
+                "You can query metrics over different time ranges (e.g., [1h], [1d], [1w]) and use different aggregation methods (sum, avg, max, min). "
+                "If the user asks for a specific pod's metrics, use get_pod_cpu_usage or get_pod_memory_usage with the appropriate namespace, pod name, time range, and aggregation method. "
+                "If the user asks for node metrics, use get_node_cpu_usage or get_node_memory_usage. "
+                "For cluster-wide metrics, use get_all_nodes_metrics. "
+                "If the user asks for top pods, use get_top_cpu_pods or get_top_memory_pods with the namespace and k value. "
                 "Present the results in a clear, organized way, summarizing the data if necessary."
             )
         },
@@ -272,7 +373,7 @@ def get_prometheus_metrics():
             "type": "function",
             "function": {
                 "name": "get_pod_cpu_usage",
-                "description": "Get CPU usage for a specific pod in a namespace over a time range",
+                "description": "Get CPU usage for a specific pod in a namespace over a time range with optional aggregation",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -286,8 +387,13 @@ def get_prometheus_metrics():
                         },
                         "range_str": {
                             "type": "string",
-                            "description": "Time range for the query (e.g., '[1h]')",
+                            "description": "Time range for the query (e.g., '[1h]', '[1d]', '[1w]')",
                             "default": "[1h]"
+                        },
+                        "aggregation": {
+                            "type": "string",
+                            "description": "Aggregation method (sum, avg, max, min)",
+                            "default": "sum"
                         }
                     },
                     "required": ["namespace", "pod"],
@@ -298,7 +404,7 @@ def get_prometheus_metrics():
             "type": "function",
             "function": {
                 "name": "get_pod_memory_usage",
-                "description": "Get memory usage for a specific pod in a namespace over a time range",
+                "description": "Get memory usage for a specific pod in a namespace over a time range with optional aggregation",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -312,11 +418,77 @@ def get_prometheus_metrics():
                         },
                         "range_str": {
                             "type": "string",
-                            "description": "Time range for the query (e.g., '[1h]')",
+                            "description": "Time range for the query (e.g., '[1h]', '[1d]', '[1w]')",
                             "default": "[1h]"
+                        },
+                        "aggregation": {
+                            "type": "string",
+                            "description": "Aggregation method (sum, avg, max, min)",
+                            "default": "sum"
                         }
                     },
                     "required": ["namespace", "pod"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_node_cpu_usage",
+                "description": "Get CPU usage for a specific node over a time range",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "node": {
+                            "type": "string",
+                            "description": "Name of the node",
+                        },
+                        "range_str": {
+                            "type": "string",
+                            "description": "Time range for the query (e.g., '[1h]', '[1d]', '[1w]')",
+                            "default": "[1h]"
+                        }
+                    },
+                    "required": ["node"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_node_memory_usage",
+                "description": "Get memory usage for a specific node over a time range",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "node": {
+                            "type": "string",
+                            "description": "Name of the node",
+                        },
+                        "range_str": {
+                            "type": "string",
+                            "description": "Time range for the query (e.g., '[1h]', '[1d]', '[1w]')",
+                            "default": "[1h]"
+                        }
+                    },
+                    "required": ["node"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_all_nodes_metrics",
+                "description": "Get CPU and memory usage metrics for all nodes over a time range",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "range_str": {
+                            "type": "string",
+                            "description": "Time range for the query (e.g., '[1h]', '[1d]', '[1w]')",
+                            "default": "[1h]"
+                        }
+                    },
                 },
             },
         },
@@ -370,6 +542,9 @@ def get_prometheus_metrics():
     available_functions = {
         "get_pod_cpu_usage": get_pod_cpu_usage,
         "get_pod_memory_usage": get_pod_memory_usage,
+        "get_node_cpu_usage": get_node_cpu_usage,
+        "get_node_memory_usage": get_node_memory_usage,
+        "get_all_nodes_metrics": get_all_nodes_metrics,
         "get_top_cpu_pods": get_top_cpu_pods,
         "get_top_memory_pods": get_top_memory_pods,
     }
